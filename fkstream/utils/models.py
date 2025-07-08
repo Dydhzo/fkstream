@@ -19,7 +19,7 @@ class AppSettings(BaseSettings):
     DATABASE_TYPE: Optional[str] = "sqlite"
     DATABASE_URL: Optional[str] = "username:password@hostname:port"
     DATABASE_PATH: Optional[str] = "data/fkstream.db"
-    METADATA_TTL: Optional[int] = 604800  # 7 jours
+    METADATA_TTL: Optional[int] = 86400  # 1 jour
     DEBRID_AVAILABILITY_TTL: Optional[int] = 86400  # 1 jour
     SCRAPE_LOCK_TTL: Optional[int] = 300  # 5 minutes
     SCRAPE_WAIT_TIMEOUT: Optional[int] = 30  # 30 secondes
