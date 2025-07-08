@@ -95,7 +95,7 @@ Toutes les configurations avancées se font via le fichier `.env`.
 | `DATABASE_TYPE`                              | (Requis) Type de base de données. Options : `sqlite`, `postgresql`.                  | `sqlite`                             |
 | `DATABASE_URL`                               | (Requis si `DATABASE_TYPE=postgresql`) URL de connexion PostgreSQL.                  | `user:pass@host:port`                |
 | `DATABASE_PATH`                              | (Requis si `DATABASE_TYPE=sqlite`) Chemin vers le fichier de base de données.        | `data/fkstream.db`                   |
-| `METADATA_TTL`                               | (Optionnel) Durée de vie du cache pour les métadonnées.                                | `86400` (24 heures)                   |
+| `METADATA_TTL`                               | (Optionnel) Durée de vie du cache pour les métadonnées.                                | `86400` (1 jour)                   |
 | `DEBRID_AVAILABILITY_TTL`                    | (Optionnel) Durée de vie du cache pour la disponibilité debrid.                        | `86400` (1 jour)                     |
 | `SCRAPE_LOCK_TTL`                            | (Optionnel) Durée de validité d'un verrou de recherche.                                | `300` (5 minutes)                    |
 | `SCRAPE_WAIT_TIMEOUT`                        | (Optionnel) Temps d'attente max pour un verrou.                                        | `30` (30 secondes)                   |
