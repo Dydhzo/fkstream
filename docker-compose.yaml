@@ -1,0 +1,14 @@
+services:
+  fkstream:
+    image: dydhzo/fkstream:latest
+    container_name: fkstream
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - fkstream:/data
+
+volumes:
+  fkstream:
