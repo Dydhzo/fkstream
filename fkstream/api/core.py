@@ -21,6 +21,7 @@ def _translate_status(status: str) -> str:
     status_translations = {
         "Continuing": "En cours",
         "Ended": "Terminé",
+        "Unknown": None,
         "Canceled": "Annulé",
         "Cancelled": "Annulé",
         "En suspens": "En suspens"
