@@ -183,7 +183,8 @@ class StremThru:
                     parts = self.sid.split(":")
                     if len(parts) >= 3 and parts[1] != "playback_filename":
                         anime_id = parts[1]
-                        cached_anime = await get_metadata_from_cache(f"fk:{anime_id}")
+                        fankai_api = FankaiAPI(self.session)
+                        cached_anime = await get_or_fetch_anime_details(fankai_api, anime_id)
                         if cached_anime:
                             logger.info(f"📚 StremThru: Metadonnees anime recuperees une seule fois pour {anime_id} (evite {len(availability_results)} requetes redondantes)")
                 except Exception as e:
