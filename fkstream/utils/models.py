@@ -97,6 +97,7 @@ class Episode(BaseModel):
     name: str
     number: Optional[int] = None
     season_number: Optional[int] = None
+    nfo_filename: Optional[str] = None
     description: Optional[str] = None
     thumbnail: Optional[str] = None
     created_at: Optional[str] = None

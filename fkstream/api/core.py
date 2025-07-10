@@ -15,6 +15,19 @@ templates = Jinja2Templates("fkstream/templates")
 main = APIRouter()
 
 
+def _translate_status(status: str) -> str:
+    """Traduit le statut de l'anime en français."""
+    status_translations = {
+        "Continuing": "En cours",
+        "Ended": "Terminé", 
+        "Unknown": "Inconnu",
+        "Canceled": "Annulé",
+        "Cancelled": "Annulé",
+        "En suspens": "En suspens"
+    }
+    return status_translations.get(status, status)
+
+
 def _build_genre_links(request: Request, b64config: str, genres: list) -> list:
     """
     Construit les liens de genre pour Stremio.
@@ -212,6 +225,7 @@ async def fankai_catalog(request: Request, b64config: str = None, search: str = 
             "genres": genres,
             "imdbRating": str(anime.get('rating_value')) if anime.get('rating_value') else None,
             "releaseInfo": str(anime.get('year')) if anime.get('year') else None,
+            "runtime": _translate_status(anime.get('status')) if anime.get('status') else None,
             "imdb_id": anime.get('imdb_id'),
             "description": anime.get('plot', '') or "Aucune description disponible",
             "links": genre_links + imdb_links,
@@ -320,6 +334,7 @@ async def fankai_meta(request: Request, id: str, b64config: str = None, fankai_a
         "genres": genres,
         "imdbRating": str(anime_data.get('rating_value')) if anime_data.get('rating_value') else None,
         "releaseInfo": str(anime_data.get('year')) if anime_data.get('year') else None,
+        "runtime": _translate_status(anime_data.get('status')) if anime_data.get('status') else None,
         "imdb_id": anime_data.get('imdb_id'),
         "description": anime_data.get('plot'),
         "links": genre_links + imdb_links + actor_links,

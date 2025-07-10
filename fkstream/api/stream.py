@@ -85,6 +85,7 @@ async def _fetch_anime_and_episode_data(fankai_api: FankaiAPI, anime_id: str, ep
                 name=episode.get('title'),
                 number=episode.get('episode_number'),
                 season_number=final_season_number,
+                nfo_filename=episode.get('nfo_filename'),
             ))
 
     anime_info = Anime(

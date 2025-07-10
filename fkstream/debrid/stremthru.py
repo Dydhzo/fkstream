@@ -5,10 +5,11 @@ from urllib.parse import unquote
 from RTN import parse
 from fkstream.utils.models import settings
 from fkstream.utils.general import is_video, find_best_file_for_episode
-from fkstream.utils.database import get_debrid_from_cache, save_debrid_to_cache, get_metadata_from_cache
+from fkstream.utils.database import get_debrid_from_cache, save_debrid_to_cache, get_metadata_from_cache, set_metadata_to_cache
 from fkstream.utils.logger import logger
 from fkstream.utils.magnet_store import get_magnet_link
 from fkstream.utils.http_client import HttpClient
+from fkstream.scrapers.fankai import FankaiAPI, get_or_fetch_anime_details
 
 
 class StremThru:
@@ -84,7 +85,7 @@ class StremThru:
                         return files
 
                     target_episode_id = int(parts[2])
-                    episode_number, episode_name = 1, ""
+                    nfo_filename = None
                     
                     try:
                         anime_id = parts[1]
@@ -92,27 +93,27 @@ class StremThru:
                             for season in cached_anime["seasons"]:
                                 for episode in season.get("episodes", []):
                                     if episode.get("id") == target_episode_id:
-                                        episode_number = episode.get("episode_number", 1)
-                                        episode_name = episode.get("title", "")
-                                        logger.info(f"✅ StremThru: episode_number {episode_number} trouve pour episode_id {target_episode_id}")
+                                        nfo_filename = episode.get("nfo_filename", None)
+                                        logger.info(f"✅ StremThru: nfo_filename trouve pour episode_id {target_episode_id}: {nfo_filename}")
                                         break
-                                if episode_name: break
+                                if nfo_filename: break
                     except Exception as e:
-                        logger.warning(f"⚠️ StremThru: Impossible de resoudre episode_number pour episode_id {target_episode_id}: {e}")
+                        logger.warning(f"⚠️ StremThru: Impossible de recuperer nfo_filename pour episode_id {target_episode_id}: {e}")
                     
                     if not torrent.get("files"):
-                        nyaa_title = sources.get("filename", f"Episode_{episode_number}")
+                        nyaa_title = sources.get("filename", f"Episode_{target_episode_id}")
                         file_info = {"hash": hash, "index": 0, "title": nyaa_title, "size": sources.get("size", 0), "season": 1, "episode": target_episode_id, "parsed": None, "seeders": seeders, "tracker": tracker, "sources": sources, "status": status}
                         files.append(file_info)
                         return files
 
                     formatted_files = [{"title": f["name"].split("/")[-1], "size": f.get("size", 0), "index": f.get("index", 0)} for f in torrent["files"] if is_video(f["name"]) and "sample" not in f["name"].lower()]
                     
-                    if "filename" in sources and not episode_name:
-                        match = re.search(rf'{episode_number:02d}\s*-\s*(.+?)(?:\.|$)', sources["filename"], re.IGNORECASE) or re.search(rf'{episode_number}\s*-\s*(.+?)(?:\.|$)', sources["filename"], re.IGNORECASE)
-                        if match: episode_name = match.group(1).strip()
+                    # Pas de nfo_filename = pas de match possible
+                    if not nfo_filename:
+                        logger.warning(f"⚠️ StremThru: Pas de nfo_filename pour episode_id {target_episode_id}, impossible de matcher")
+                        return []
                     
-                    episode_info = {"episode": episode_number, "episode_name": episode_name}
+                    episode_info = {"nfo_filename": nfo_filename}
                     best_file = find_best_file_for_episode(formatted_files, episode_info)
                     
                     if best_file:
@@ -234,7 +235,7 @@ class StremThru:
                         logger.info(f"⬇️ Cache mis a jour: {hash} → en telechargement")
                 return status
 
-            target_file = self._find_target_file(magnet, hash, name, torrent_name, season, episode, index)
+            target_file = await self._find_target_file(magnet, hash, name, torrent_name, season, episode, index)
             if not target_file:
                 logger.warning(f"❌ Aucun fichier cible trouve pour le hash {hash}")
                 return
@@ -283,7 +284,7 @@ class StremThru:
         except Exception as e:
             logger.warning(f"Exception lors de la recuperation du lien de telechargement pour {hash}: {e}")
 
-    def _find_target_file(self, magnet: dict, hash: str, name: str, torrent_name: str, season: int, episode: int, index: str):
+    async def _find_target_file(self, magnet: dict, hash: str, name: str, torrent_name: str, season: int, episode: int, index: str):
         """Trouve le bon fichier dans la liste des fichiers d'un torrent en fonction des métadonnées."""
         name = unquote(name)
         torrent_name = unquote(torrent_name)
@@ -316,18 +317,52 @@ class StremThru:
                             if target_filename in file.get('name', ''): return file
                     else:
                         target_episode_id = int(parts[2])
-                        logger.info(f"⚠️ StremThru _find_target_file: Utilisation de episode_id {target_episode_id} comme episode_number pour la correspondance")
+                        logger.info(f"⚠️ StremThru _find_target_file: Recherche de l'episode {target_episode_id} avec nfo_filename")
+                        
+                        # Récupérer le nfo_filename pour cet épisode
+                        nfo_filename = await self._get_nfo_filename_for_episode(parts[1], target_episode_id)
+                        if not nfo_filename:
+                            logger.warning(f"⚠️ StremThru: Impossible de récupérer nfo_filename pour l'episode {target_episode_id}")
+                            return None
+                        
                         formatted_files = [{"title": f.get("name", "").split("/")[-1], "size": f.get("size", 0), "original_file": f} for f in files_with_link]
-                        episode_name = ""
-                        search_text = torrent_name if torrent_name != name else name
-                        match = re.search(rf'{target_episode_id:02d}\s*-\s*(.+?)(?:\.|$)', search_text, re.IGNORECASE) or re.search(rf'{target_episode_id}\s*-\s*(.+?)(?:\.|$)', search_text, re.IGNORECASE)
-                        if match: episode_name = match.group(1).strip()
-                        episode_info = {"episode": target_episode_id, "episode_name": episode_name}
+                        episode_info = {"nfo_filename": nfo_filename}
                         best_file = find_best_file_for_episode(formatted_files, episode_info)
                         if best_file: return best_file["original_file"]
             except (ValueError, IndexError):
                 pass
         return max(files_with_link, key=lambda x: x.get("size", 0))
+
+    async def _get_nfo_filename_for_episode(self, anime_id: str, episode_id: int):
+        """Récupère le nfo_filename pour un épisode donné."""
+        try:
+            # Utiliser la même fonction que stream.py pour uniformité
+            fankai_api = FankaiAPI(self.session)
+            
+            anime_data = await get_or_fetch_anime_details(fankai_api, anime_id)
+            if not anime_data:
+                logger.warning(f"❌ StremThru: Impossible de récupérer les métadonnées pour {anime_id}")
+                return None
+                
+            return self._extract_nfo_filename_from_metadata(anime_data, episode_id)
+            
+        except Exception as e:
+            logger.error(f"❌ StremThru: Erreur lors de la récupération du nfo_filename: {e}")
+            return None
+
+    def _extract_nfo_filename_from_metadata(self, anime_data: dict, episode_id: int):
+        """Extrait le nfo_filename depuis les métadonnées."""
+        try:
+            seasons = anime_data.get("seasons", [])
+            for season in seasons:
+                episodes = season.get("episodes", [])
+                for episode in episodes:
+                    if episode.get("id") == episode_id:
+                        return episode.get("nfo_filename")
+            return None
+        except Exception as e:
+            logger.error(f"❌ StremThru: Erreur lors de l'extraction du nfo_filename: {e}")
+            return None
 
     async def _handle_magnet_status(self, hash: str, magnet: dict):
         """Gère les différents statuts d'un lien magnet et retourne un objet magnet mis à jour ou une réponse finale."""

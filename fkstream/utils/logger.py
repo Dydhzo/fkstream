@@ -3,7 +3,7 @@ import logging
 import os
 
 from loguru import logger
-
+from .models import settings
 def setupLogger():
     """
     Configure le logger Loguru avec des niveaux personnalisés, des formats et des couleurs.
@@ -13,7 +13,6 @@ def setupLogger():
     
     if not log_level:
         try:
-            from .models import settings
             log_level = getattr(settings, 'LOG_LEVEL', 'DEBUG')
         except (ImportError, AttributeError):
             log_level = "DEBUG"

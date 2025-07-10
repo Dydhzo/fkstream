@@ -4,7 +4,6 @@ from typing import Dict, List, Any
 from .nyaa import NyaaAPI
 from fkstream.utils.general import find_best_file_for_episode, normalize_anime_title_for_search
 from fkstream.utils.models import Anime, Episode
-from fkstream.utils.size_utils import parse_size_to_bytes
 from fkstream.utils.common_logger import logger
 
 class NyaaMatcher:
@@ -31,8 +30,7 @@ class NyaaMatcher:
             normalized_title = normalize_anime_title_for_search(anime_info.name)
             logger.info(f"Recherche de torrents pour '{anime_info.name}' (normalise: '{normalized_title}') episode {selected_episode.number}")
             
-            # Passer le titre complet original pour le filtrage RSS
-            torrents = await self.api.search_torrents(normalized_title, user_ip=user_ip, full_anime_title=anime_info.name)
+            torrents = await self.api.search_torrents(normalized_title, user_ip=user_ip)
             if not torrents:
                 logger.warning("Aucun torrent trouve pour le titre de l'anime")
                 return []
@@ -62,7 +60,7 @@ class NyaaMatcher:
                     "original_torrent_index": file.get('torrent_index', i)
                 } for i, file in enumerate(file_list)]
 
-                episode_info = {"episode": selected_episode.number, "episode_name": selected_episode.name}
+                episode_info = {"nfo_filename": selected_episode.nfo_filename}
                 logger.info(f"Recherche pour l'episode {selected_episode.number}: '{selected_episode.name}' (episode_id: {selected_episode.id.split(':')[-1]})")
                 best_file = find_best_file_for_episode(formatted_files, episode_info)
 
@@ -74,7 +72,7 @@ class NyaaMatcher:
                     torrent['title'] = best_file['title']
                     relevant_torrents.append(torrent)
                 else:
-                    logger.warning(f"Aucun fichier approprie trouve pour l'episode {selected_episode.number} dans le torrent {torrent.get('title', 'Inconnu')}")
+                    logger.warning(f"Aucun fichier approprie trouve pour l'episode {selected_episode.number} (nfo: {selected_episode.nfo_filename}) dans le torrent {torrent.get('title', 'Inconnu')}")
             
             relevant_torrents = [t for t in relevant_torrents if int(t.get('seeders', 0)) > 0]
             relevant_torrents.sort(key=lambda x: int(x.get('seeders', 0)), reverse=True)

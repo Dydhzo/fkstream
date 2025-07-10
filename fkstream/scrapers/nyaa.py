@@ -5,7 +5,7 @@ import re
 import bencode
 import hashlib
 
-from fkstream.utils.general import is_video, normalize_for_search
+from fkstream.utils.general import is_video
 from fkstream.utils.http_client import HttpClient
 from fkstream.utils.size_utils import bytes_to_size, parse_size_to_bytes
 from fkstream.utils.http_constants import DEFAULT_USER_AGENT
@@ -24,8 +24,8 @@ class NyaaAPI(BaseClient):
         self.base_url = "https://nyaa.si"
         self.client = HttpClient(base_url=self.base_url, timeout=settings.GET_TORRENT_TIMEOUT, user_agent=DEFAULT_USER_AGENT)
     
-    async def search_torrents(self, query: str, user: str = "Fan-Kai", user_ip: str = None, full_anime_title: str = None) -> List[Dict[str, Any]]:
-        """Recherche des torrents sur Nyaa.si en utilisant le flux RSS avec filtrage par titre complet."""
+    async def search_torrents(self, query: str, user: str = "Fan-Kai", user_ip: str = None) -> List[Dict[str, Any]]:
+        """Recherche des torrents sur Nyaa.si en utilisant le flux RSS."""
         # Rate limiting par IP utilisateur
         if user_ip:
             await nyaa_rate_limiter.wait_for_user(user_ip)
@@ -42,33 +42,6 @@ class NyaaAPI(BaseClient):
             
             feed = feedparser.parse(response.text)
             torrents = [torrent for item in feed.entries if (torrent := self._parse_rss_item(item))]
-            
-            logger.info(f"{len(torrents)} torrents RSS trouves pour la requete: {query}")
-            
-            # Filtrage RSS par titre complet normalisé si fourni
-            if full_anime_title and torrents:
-                normalized_full_title = normalize_for_search(full_anime_title)
-                logger.info(f"🔍 FILTRAGE RSS - Titre complet normalise: '{normalized_full_title}'")
-                
-                filtered_torrents = []
-                for torrent in torrents:
-                    rss_title = torrent.get('title', '')
-                    normalized_rss_title = normalize_for_search(rss_title)
-                    
-                    if normalized_full_title in normalized_rss_title:
-                        filtered_torrents.append(torrent)
-                        logger.debug(f"✅ MATCH RSS: '{rss_title}' contient '{full_anime_title}'")
-                    else:
-                        logger.debug(f"❌ REJECT RSS: '{rss_title}' ne contient pas '{full_anime_title}'")
-                
-                logger.info(f"🔍 FILTRAGE RSS - {len(filtered_torrents)}/{len(torrents)} torrents conserves apres filtrage par titre")
-                
-                # Si le filtrage strict ne donne rien, retourner la liste originale comme plan de secours
-                if not filtered_torrents:
-                    logger.warning(f"Le filtrage strict pour '{full_anime_title}' n'a donne aucun resultat. Retour de la liste non filtree comme plan de secours.")
-                    return torrents
-                
-                return filtered_torrents
             
             logger.info(f"{len(torrents)} torrents finaux pour la requete: {query}")
             return torrents
