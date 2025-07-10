@@ -58,6 +58,7 @@ class ConfigModel(BaseModel):
     debridApiKey: Optional[str] = ""
     debridStreamProxyPassword: Optional[str] = ""
     maxActorsDisplay: Optional[str] = "all"
+    defaultSort: Optional[str] = "last_update"
 
     @field_validator("debridService")
     def check_debrid_service(cls, v):
@@ -78,13 +79,31 @@ class ConfigModel(BaseModel):
         if v not in valid_options:
             raise ValueError(f"Option d'affichage max d'acteurs invalide. Doit être l'une des suivantes: {valid_options}")
         return v
+        
+    @field_validator("defaultSort")
+    def check_default_sort(cls, v):
+        valid_sorts = ["last_update", "rating_value", "title", "year"]
+        if v not in valid_sorts:
+            raise ValueError(f"Option de tri invalide. Doit être l'une des suivantes: {valid_sorts}")
+        return v
 
 
 default_config = ConfigModel().model_dump()
 
 web_config = {
-    "debridServices": DEBRID_SERVICES,
-    "maxActorsDisplayOptions": ["5", "10", "15", "all"]
+    "debridServices": {
+        "realdebrid": "Real-Debrid",
+        "alldebrid": "AllDebrid",
+        "premiumize": "Premiumize",
+        "torbox": "Torbox",
+        "easydebrid": "EasyDebrid",
+        "debridlink": "Debrid-Link",
+        "offcloud": "Offcloud",
+        "pikpak": "PikPak",
+        "torrent": "Torrent",
+    },
+    "maxActorsDisplayOptions": ["5", "10", "15", "all"],
+    "defaultDebrid": "realdebrid"
 }
 
 database_url = settings.DATABASE_PATH if settings.DATABASE_TYPE == "sqlite" else settings.DATABASE_URL
