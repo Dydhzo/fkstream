@@ -208,10 +208,9 @@ async def fankai_catalog(request: Request, b64config: str = None, search: str = 
         await set_metadata_to_cache("fk:list", animes_data)
 
     # Logique de tri
-    sort_by = sort
-    if not sort_by:
-        config = config_check(b64config)
-        sort_by = config.get("defaultSort", "last_update")
+    config = config_check(b64config)
+    sort_key_from_ui = sort.split(':')[0] if sort else None
+    sort_by = sort_key_from_ui if sort_key_from_ui else config.get("defaultSort", "last_update")
     
     logger.info(f"Tri du catalogue par: {sort_by}")
 
@@ -219,10 +218,16 @@ async def fankai_catalog(request: Request, b64config: str = None, search: str = 
         val = anime.get(key)
         if val is None:
             if key in ['rating_value', 'year']: return -1
+            if key == 'last_update': return datetime.min
             return ""
         if key in ['rating_value', 'year']:
             try: return float(val)
             except (ValueError, TypeError): return -1
+        if key == 'last_update':
+            try:
+                return datetime.fromisoformat(str(val).replace(" ", "T"))
+            except (ValueError, TypeError):
+                return datetime.min
         return val
 
     reverse = sort_by != 'title'
