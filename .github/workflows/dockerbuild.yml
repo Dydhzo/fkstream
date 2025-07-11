@@ -1,14 +1,11 @@
-# Nom du workflow qui apparaîtra dans l'onglet Actions de GitHub
 name: Docker Image CI
 
-# Déclencheur du workflow : à chaque push sur la branche 'main'
 on:
   push:
     branches: [ "main" ]
 
 jobs:
   build-and-push:
-    # Le type de machine sur lequel le job va s'exécuter
     runs-on: ubuntu-latest
     
     permissions:
