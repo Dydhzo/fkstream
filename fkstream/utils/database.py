@@ -6,7 +6,7 @@ import asyncio
 from fkstream.utils.common_logger import logger
 from fkstream.utils.models import database, settings
 
-DATABASE_VERSION = "1.0"
+DATABASE_VERSION = "1.1"
 
 
 async def setup_database():
@@ -28,7 +28,7 @@ async def setup_database():
             logger.log("FKSTREAM", f"Base de donnees: Migration de la version {current_version} a {DATABASE_VERSION}")
 
             if settings.DATABASE_TYPE == "sqlite":
-                allowed_tables = {'scrape_lock', 'metadata', 'torrent', 'debrid_availability'}
+                allowed_tables = {'scrape_lock', 'metadata', 'debrid_availability'}
                 tables = await database.fetch_all("SELECT name FROM sqlite_master WHERE type='table' AND name NOT IN ('db_version', 'sqlite_sequence')")
                 for table in tables:
                     table_name = table['name']
@@ -58,7 +58,6 @@ async def setup_database():
 
         await database.execute("CREATE TABLE IF NOT EXISTS scrape_lock (lock_key TEXT PRIMARY KEY, instance_id TEXT, timestamp INTEGER, expires_at INTEGER)")
         await database.execute("CREATE TABLE IF NOT EXISTS metadata (media_id TEXT PRIMARY KEY, media_data TEXT, timestamp REAL NOT NULL, expires_at REAL)")
-        await database.execute("CREATE TABLE IF NOT EXISTS torrent (hash TEXT PRIMARY KEY, file_data TEXT NOT NULL, tracker_data TEXT NOT NULL, created_at REAL NOT NULL)")
         await database.execute("CREATE TABLE IF NOT EXISTS debrid_availability (media_id TEXT NOT NULL, hash TEXT NOT NULL, debrid_service TEXT NOT NULL, status TEXT NOT NULL, timestamp REAL NOT NULL, expires_at REAL, PRIMARY KEY (media_id, hash, debrid_service))")
 
         if settings.DATABASE_TYPE == "sqlite":
@@ -136,29 +135,6 @@ async def save_debrid_to_cache(media_id: str, hash: str, debrid_service: str, st
     values = {"media_id": media_id, "hash": hash, "debrid_service": debrid_service, "status": status, "timestamp": current_time, "expires_at": expires_at}
     await database.execute(query, values)
 
-
-async def get_torrent_from_cache(hash: str):
-    """Récupère les données d'un torrent depuis le cache permanent."""
-    query = "SELECT file_data, tracker_data FROM torrent WHERE hash = :hash"
-    result = await database.fetch_one(query, {"hash": hash.lower()})
-    if not result:
-        return None
-    try:
-        return {"files": json.loads(result["file_data"]), "trackers": json.loads(result["tracker_data"])}
-    except json.JSONDecodeError:
-        return None
-
-
-async def save_torrent_to_cache(hash: str, files: list, trackers: list):
-    """Sauvegarde les données d'un torrent dans le cache permanent."""
-    current_time = time.time()
-    if settings.DATABASE_TYPE == "sqlite":
-        query = "INSERT OR REPLACE INTO torrent (hash, file_data, tracker_data, created_at) VALUES (:hash, :file_data, :tracker_data, :created_at)"
-    else:
-        query = "INSERT INTO torrent (hash, file_data, tracker_data, created_at) VALUES (:hash, :file_data, :tracker_data, :created_at) ON CONFLICT (hash) DO UPDATE SET file_data = :file_data, tracker_data = :tracker_data, created_at = :created_at"
-    values = {"hash": hash.lower(), "file_data": json.dumps(files), "tracker_data": json.dumps(trackers), "created_at": current_time}
-    await database.execute(query, values)
-    logger.info(f"💾 CACHE TORRENT SAUVEGARDE: {hash} - {len(files)} fichiers, {len(trackers)} traqueurs")
 
 
 async def acquire_lock(lock_key: str, instance_id: str, duration: int = None) -> bool:
