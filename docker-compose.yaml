@@ -9,7 +9,6 @@ services:
       - .env
     volumes:
       - fkstream:/data
-      - ./dataset.json:/app/dataset.json
 
 volumes:
   fkstream:
