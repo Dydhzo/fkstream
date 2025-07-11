@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://i.postimg.cc/Y28VVXfV/fkstream-logo.jpg" alt="FKStream Logo" width="150">
+  <img src="https://raw.githubusercontent.com/Dydhzo/fkstream/refs/heads/main/fkstream/assets/fkstream-logo.jpg" alt="FKStream Logo" width="150">
   <h1>FKStream</h1>
   <p><strong>Addon Stremio non officiel pour accéder au contenu de Fankai.</strong></p>
   <p>
