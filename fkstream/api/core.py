@@ -120,8 +120,8 @@ async def manifest(request: Request, b64config: str = None, fankai_api: FankaiAP
             {"name": "stream", "types": ["anime"], "idPrefixes": ["fk"]}
         ],
         "types": ["anime"],
-        "logo": "https://raw.githubusercontent.com/Dydhzo/fkstream/main/assets/fkstream-logo.jpg",
-        "background": "https://raw.githubusercontent.com/Dydhzo/fkstream/main/assets/fkstream-background.jpg",
+        "logo": "https://raw.githubusercontent.com/Dydhzo/fkstream/refs/heads/main/fkstream/assets/fkstream-logo.jpg",
+        "background": "https://raw.githubusercontent.com/Dydhzo/fkstream/refs/heads/main/fkstream/assets/fkstream-background.jpg",
         "behaviorHints": {"configurable": True, "configurationRequired": False},
     }
 
