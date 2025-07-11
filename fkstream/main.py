@@ -4,7 +4,7 @@ import time
 import uvicorn
 import os
 import asyncio
-
+import orjson
 from contextlib import asynccontextmanager, contextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,22 +52,34 @@ class LoguruMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     """
     Gère le cycle de vie de l'application FastAPI.
-    Initialise et nettoie les ressources telles que la base de données et le client HTTP.
+    Initialise les ressources et charge le dataset local au démarrage.
     """
     await setup_database()
     
     try:
+        # Initialisation du client HTTP
         app.state.http_client = HttpClient()
-        logger.debug("Client HTTP initialise avec succes")
-    except Exception as e:
-        logger.error(f"Echec de l'initialisation du client HTTP: {e}")
-        raise RuntimeError(f"L'initialisation du client HTTP a echoue: {e}")
+        logger.debug("Client HTTP initialisé avec succès")
 
+        # Chargement du dataset local
+        with open('dataset.json', 'r', encoding='utf-8') as f:
+            app.state.dataset = orjson.loads(f.read())
+            logger.log("FKSTREAM", "Dataset local chargé avec succès.")
+
+    except FileNotFoundError:
+        logger.error("Le fichier 'dataset.json' est introuvable. L'addon ne pourra pas fournir de liens de streaming.")
+        app.state.dataset = {"top": []}  # Initialise avec un dataset vide pour éviter les erreurs
+    except Exception as e:
+        logger.error(f"Échec de l'initialisation : {e}")
+        raise RuntimeError(f"L'initialisation a échoué : {e}")
+
+    # Tâche de nettoyage pour les verrous expirés
     cleanup_task = asyncio.create_task(cleanup_expired_locks())
 
     try:
         yield
     finally:
+        # Nettoyage à l'arrêt de l'application
         cleanup_task.cancel()
         try:
             await cleanup_task
@@ -76,6 +88,7 @@ async def lifespan(app: FastAPI):
         
         await app.state.http_client.close()
         await teardown_database()
+        logger.info("Ressources de l'application nettoyées.")
 
 
 app = FastAPI(

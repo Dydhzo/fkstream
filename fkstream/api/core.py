@@ -91,7 +91,7 @@ async def manifest(request: Request, b64config: str = None, fankai_api: FankaiAP
         "id": settings.ADDON_ID,
         "name": settings.ADDON_NAME,
         "description": "FKStream – Addon non officiel pour accéder au contenu de Fankai",
-        "version": "1.1.0",
+        "version": "1.0.0",
         "catalogs": [
             {
                 "type": "anime",
@@ -187,7 +187,7 @@ async def extract_unique_genres(fankai_api: FankaiAPI) -> list[str]:
 @main.get("/{b64config}/catalog/anime/fankai_catalog/sort={sort}.json")
 async def fankai_catalog(request: Request, b64config: str = None, search: str = None, genre: str = None, sort: str = None, fankai_api: FankaiAPI = Depends(get_fankai_api)):
     """
-    Fournit le catalogue d'animes, avec des options de recherche, de filtrage par genre et de tri.
+    Fournit le catalogue d'animes en filtrant par le dataset local.
     """
     if not search and "search" in request.query_params:
         search = request.query_params.get("search")
@@ -196,7 +196,16 @@ async def fankai_catalog(request: Request, b64config: str = None, search: str = 
     if not sort and "sort" in request.query_params:
         sort = request.query_params.get("sort")
 
-    logger.info(f"🔍 CATALOG - Catalogue Fankai demande, recherche: {search}, genre: {genre}, tri: {sort}")
+    logger.info(f"🔍 CATALOG - Catalogue Fankai demandé, recherche: {search}, genre: {genre}, tri: {sort}")
+
+
+    # 1. Obtenir la liste des api_id autorisés depuis le dataset
+    dataset_animes = request.app.state.dataset.get('top', [])
+    available_api_ids = {str(anime.get('api_id')) for anime in dataset_animes}
+
+    if not available_api_ids:
+        logger.warning("Le dataset est vide ou ne contient aucun api_id. Le catalogue sera vide.")
+        return {"metas": []}
 
     animes_data = await get_metadata_from_cache("fk:list")
 
@@ -206,8 +215,14 @@ async def fankai_catalog(request: Request, b64config: str = None, search: str = 
         logger.debug("📦 CACHE MISS: fk:list - Recuperation depuis l'API")
         animes_data = await fankai_api.get_all_series()
         await set_metadata_to_cache("fk:list", animes_data)
+        
+        
+    # 2. Filtrer la liste d'animes (du cache ou de l'API) pour ne garder que ceux du dataset
+    animes_data = [anime for anime in animes_data if str(anime.get('id')) in available_api_ids]
+    logger.info(f"Filtrage par dataset : {len(animes_data)} animes valides à traiter.")
 
-    # Logique de tri
+
+
     config = config_check(b64config)
     sort_key_from_ui = sort.split(':')[0] if sort else None
     sort_by = sort_key_from_ui if sort_key_from_ui else config.get("defaultSort", "last_update")
@@ -224,10 +239,8 @@ async def fankai_catalog(request: Request, b64config: str = None, search: str = 
             try: return float(val)
             except (ValueError, TypeError): return -1
         if key == 'last_update':
-            try:
-                return datetime.fromisoformat(str(val).replace(" ", "T"))
-            except (ValueError, TypeError):
-                return datetime.min
+            try: return datetime.fromisoformat(str(val).replace(" ", "T"))
+            except (ValueError, TypeError): return datetime.min
         return val
 
     reverse = sort_by != 'title'
@@ -245,8 +258,8 @@ async def fankai_catalog(request: Request, b64config: str = None, search: str = 
         if genre and genre not in genres:
             continue
 
-        genre_links = _build_genre_links(request, b64config, genres)
 
+        genre_links = _build_genre_links(request, b64config, genres)
         imdb_links = []
         if anime.get('imdb_id'):
             rating_display = str(anime.get('rating_value')) if anime.get('rating_value') else "N/A"
@@ -302,7 +315,7 @@ async def fankai_catalog(request: Request, b64config: str = None, search: str = 
     elif genre:
         logger.info(f"🎭 CATALOG - Genre '{genre}': {len(metas)} animes trouves")
     else:
-        logger.info(f"🔍 CATALOG - Retour de tous les {len(metas)} animes")
+        logger.info(f"🔍 CATALOG - Retour de tous les {len(metas)} animes valides")
 
     return {"metas": metas}
 
