@@ -19,39 +19,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Étape 2: Affiche tous les tags disponibles (debug)
-      - name: List all tags
+      # Étape 2: Récupère le dernier tag Git si workflow_dispatch
+      - name: Get latest tag
+        id: get_tag
+        if: github.event_name == 'workflow_dispatch'
         run: |
-          git tag -l
-          echo "Current commit: $(git rev-parse HEAD)"
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.1")
+          echo "TAG=$LATEST_TAG" >> $GITHUB_ENV
+          echo "Utilisation du tag: $LATEST_TAG"
 
-      # Étape 3: Récupère et définit explicitement le dernier tag
-      - name: Set tag version
-        id: get_version
-        run: |
-          # Détermine la source du tag
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
-            # Si déclenché par un push de tag, utilise ce tag
-            echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-            echo "Using pushed tag: ${GITHUB_REF#refs/tags/}"
-          else
-            # Sinon, utilise le dernier tag disponible ou une valeur par défaut
-            LATEST_TAG=$(git tag --sort=-v:refname | head -n 1)
-            if [ -z "$LATEST_TAG" ]; then
-              LATEST_TAG="v0.0.1"
-              echo "No tags found, using default: $LATEST_TAG"
-            else
-              echo "Using latest tag: $LATEST_TAG"
-            fi
-            echo "TAG=$LATEST_TAG" >> $GITHUB_ENV
-          fi
+      # Étape 3: Configuration QEMU (CRITIQUE pour ARM64)
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
 
-      # Étape 4: Afficher le tag utilisé (debug)
-      - name: Display tag
-        run: |
-          echo "Building Docker image with tag: ${{ env.TAG }}"
-
-      # Étape 5: Configuration Docker meta
+      # Étape 4: Extrait les métadonnées pour Docker
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
@@ -60,34 +43,36 @@ jobs:
             dydhzo/fkstream
             ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=${{ env.TAG }}
+            # Pour déclenchement par tag Git
+            type=ref,event=tag
+            # Pour déclenchement manuel (utilise le dernier tag)
+            type=raw,value=${{ env.TAG }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            # Toujours ajouter latest
             type=raw,value=latest
 
-      # Étape 6: Configuration QEMU pour ARM64
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      # Étape 7: Configuration avancée Buildx
+      # Étape 5: Configuration Docker Buildx
       - name: Set up Docker Buildx
-        id: buildx
         uses: docker/setup-buildx-action@v3
         with:
-          install: true
+          driver: docker-container
+          driver-opts: |
+            image=moby/buildkit:master
+          platforms: linux/amd64,linux/arm64
 
-      # Étape 8: Vérification des plateformes disponibles (debug)
+      # Étape 6: Vérification des plateformes disponibles (debug)
       - name: Inspect builder
         run: |
           docker buildx inspect --bootstrap
-          echo "Available platforms: $(docker buildx inspect --bootstrap | grep "Platforms:" || echo "None found")"
+          echo "Available platforms: $(docker buildx inspect --bootstrap | grep "Platforms")"
 
-      # Étape 9: Connexion à Docker Hub
+      # Étape 7: Connexion à Docker Hub
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Étape 10: Connexion à GitHub Container Registry
+      # Étape 8: Connexion à GitHub Container Registry
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -95,15 +80,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Étape 11: Construction et publication avec multi-architecture explicite
+      # Étape 9: Construction et publication de l'image Docker
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          builder: ${{ steps.buildx.outputs.name }}
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Désactive provenance qui peut causer des problèmes avec les builds multi-arch
+          provenance: false
