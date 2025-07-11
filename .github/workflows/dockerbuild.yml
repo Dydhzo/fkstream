@@ -1,8 +1,8 @@
 name: Docker Image CI
 
+# Déclencheur du workflow : à chaque push sur la branche 'main'
 on:
   workflow_dispatch:
-
 
 jobs:
   build-and-push:
@@ -13,11 +13,11 @@ jobs:
       packages: write
 
     steps:
-    # Étape 1: Récupération du code
+    # Étape 1: Récupération du ccode
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    # Étape 2: Extrait les métadonnées
+    # Étape 2: Extraction métadonnées
     - name: Docker meta
       id: meta
       uses: docker/metadata-action@v5
@@ -28,18 +28,22 @@ jobs:
         tags: |
           type=raw,value=latest,enable={{is_default_branch}}
 
-    # Étape 3: Met en place Docker Buildx
+    # Étape 3: Mise en place de QEMU
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    # Étape 4: Mise en place Docker Buildx
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    # Étape 4: Connexion à Docker Hub
+    # Étape 5: Connexion à Docker Hub
     - name: Log in to Docker Hub
       uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    # Étape 5: Connexion à GitHub Container Registry (GHCR.io)
+    # Étape 6: Connexion à GitHub Container Registry
     - name: Log in to GitHub Container Registry
       uses: docker/login-action@v3
       with:
@@ -47,11 +51,12 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    # Étape 6: Construit l'image Docker et la pousse sur les deux
+    # Étape 7: Multiconstruct
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
         context: .
+        platforms: linux/amd64,linux/arm64
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
