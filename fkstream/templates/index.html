@@ -379,18 +379,18 @@
                 <label class="form-label" for="defaultSortButton"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4.5h18a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5Zm0 5.25h18a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5Zm0 5.25h18a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5Z" /></svg>Tri par défaut</label>
                 <div class="dropdown" id="defaultSortDropdown">
                     <button type="button" class="dropdown-button" id="defaultSortButton" aria-haspopup="listbox" aria-expanded="false">
-                        <span id="defaultSortText">Dernière mise à jour</span>
+                        <span id="defaultSortText">Dernière mise à jour ▼</span>
                         <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
                     </button>
                     <div class="dropdown-menu" id="defaultSortMenu" role="listbox">
-                        <div class="dropdown-item selected" data-value="last_update" role="option">Dernière mise à jour</div>
-                        <div class="dropdown-item" data-value="rating_value" role="option">Note</div>
-                        <div class="dropdown-item" data-value="title" role="option">Titre</div>
-                        <div class="dropdown-item" data-value="year" role="option">Année</div>
+                        <div class="dropdown-item selected" data-value="last_update" role="option">Dernière mise à jour ▼</div>
+                        <div class="dropdown-item" data-value="rating_value" role="option">Note ▼</div>
+                        <div class="dropdown-item" data-value="title" role="option">Titre ▲</div>
+                        <div class="dropdown-item" data-value="year" role="option">Année ▼</div>
                     </div>
                 </div>
                 <input type="hidden" id="defaultSort" value="last_update">
-                <div class="help-text">Choisissez le critère de tri par défaut pour le catalogue.</div>
+                <div class="help-text">Choisissez le critère de tri par défaut pour le catalogue.<br>▲ = ordre croissant | ▼ = ordre décroissant</div>
             </div>
 
             <div class="form-group">
