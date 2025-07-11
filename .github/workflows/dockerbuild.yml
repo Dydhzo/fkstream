@@ -1,6 +1,5 @@
 name: Docker Image CI
 
-# Déclencheur du workflow : à chaque push sur la branche 'main'
 on:
   workflow_dispatch:
 
