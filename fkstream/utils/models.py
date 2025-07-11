@@ -24,8 +24,6 @@ class AppSettings(BaseSettings):
     SCRAPE_LOCK_TTL: Optional[int] = 300  # 5 minutes
     SCRAPE_WAIT_TIMEOUT: Optional[int] = 30  # 30 secondes
     DEBRID_PROXY_URL: Optional[str] = None
-    GET_TORRENT_TIMEOUT: Optional[int] = 20 # 20 secondes
-    NYAA_RATE_LIMIT_DELAY: Optional[int] = 1 # 1 seconde
     CUSTOM_HEADER_HTML: Optional[str] = None
     PROXY_DEBRID_STREAM: Optional[bool] = False
     PROXY_DEBRID_STREAM_DEBRID_DEFAULT_SERVICE: Optional[str] = "realdebrid"
