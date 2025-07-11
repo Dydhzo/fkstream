@@ -60,78 +60,19 @@ class StremThru:
             logger.warning(f"Exception lors de la verification de la disponibilite instantanee du hash sur {self.name}: {e}")
 
     async def _process_availability_result(self, torrent: dict, seeders_map: dict, tracker_map: dict, sources_map: dict, cached_anime: dict = None):
-        """Traite un seul résultat de torrent de la vérification de disponibilité."""
+        """
+        Traite un seul résultat de torrent de la vérification de disponibilité.
+        Renvoie simplement le statut brut pour être traité plus tard.
+        """
         status = torrent.get("status")
         if not status:
             return []
 
-        hash = torrent["hash"]
-        seeders = seeders_map.get(hash)
-        tracker = tracker_map.get(hash)
-        sources = sources_map.get(hash)
-        
-        if not all([seeders, tracker, sources]):
-            return []
+        return [{
+            "hash": torrent["hash"],
+            "status": status
+        }]
 
-        files = []
-        if self.sid and self.sid.startswith("fk:"):
-            try:
-                clean_sid = self.sid.replace("fk:fk:", "fk:")
-                parts = clean_sid.split(":")
-                if len(parts) >= 3:
-                    if parts[1] == "playback_filename":
-                        file_info = {"hash": hash, "index": 0, "title": "filename_from_nyaa", "size": 0, "season": 1, "episode": 1, "parsed": None, "seeders": seeders, "tracker": tracker, "sources": sources, "status": status}
-                        files.append(file_info)
-                        return files
-
-                    target_episode_id = int(parts[2])
-                    nfo_filename = None
-                    
-                    try:
-                        anime_id = parts[1]
-                        if cached_anime and cached_anime.get("seasons"):
-                            for season in cached_anime["seasons"]:
-                                for episode in season.get("episodes", []):
-                                    if episode.get("id") == target_episode_id:
-                                        nfo_filename = episode.get("nfo_filename", None)
-                                        logger.info(f"✅ StremThru: nfo_filename trouve pour episode_id {target_episode_id}: {nfo_filename}")
-                                        break
-                                if nfo_filename: break
-                    except Exception as e:
-                        logger.warning(f"⚠️ StremThru: Impossible de recuperer nfo_filename pour episode_id {target_episode_id}: {e}")
-                    
-                    if not torrent.get("files"):
-                        nyaa_title = sources.get("filename", f"Episode_{target_episode_id}")
-                        file_info = {"hash": hash, "index": 0, "title": nyaa_title, "size": sources.get("size", 0), "season": 1, "episode": target_episode_id, "parsed": None, "seeders": seeders, "tracker": tracker, "sources": sources, "status": status}
-                        files.append(file_info)
-                        return files
-
-                    formatted_files = [{"title": f["name"].split("/")[-1], "size": f.get("size", 0), "index": f.get("index", 0)} for f in torrent["files"] if is_video(f["name"]) and "sample" not in f["name"].lower()]
-                    
-                    # Pas de nfo_filename = pas de match possible
-                    if not nfo_filename:
-                        logger.warning(f"⚠️ StremThru: Pas de nfo_filename pour episode_id {target_episode_id}, impossible de matcher")
-                        return []
-                    
-                    episode_info = {"nfo_filename": nfo_filename}
-                    best_file = find_best_file_for_episode(formatted_files, episode_info)
-                    
-                    if best_file:
-                        file_info = {"hash": hash, "index": best_file["index"], "title": best_file["title"], "size": best_file["size"], "season": 1, "episode": target_episode_id, "parsed": None, "seeders": seeders, "tracker": tracker, "sources": sources, "status": status}
-                        files.append(file_info)
-            except (ValueError, IndexError):
-                pass
-        else:
-            for file in torrent.get("files", []):
-                filename = file["name"].split("/")[-1]
-                if not is_video(filename) or "sample" in filename.lower(): continue
-                filename_parsed = parse(filename)
-                season = filename_parsed.seasons[0] if filename_parsed.seasons else None
-                episode = filename_parsed.episodes[0] if filename_parsed.episodes else None
-                if ":" in self.sid and (season is None or episode is None): continue
-                file_info = {"hash": hash, "index": file.get("index", -1), "title": filename, "size": file.get("size", -1), "season": season, "episode": episode, "parsed": filename_parsed, "seeders": seeders, "tracker": tracker, "sources": sources}
-                files.append(file_info)
-        return files
 
     async def _fetch_availability_in_chunks(self, torrent_hashes: list):
         """Récupère la disponibilité auprès de StremThru par lots pour éviter les limites de longueur d'URL."""

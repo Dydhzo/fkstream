@@ -109,41 +109,12 @@ def _create_stream_item(request: Request, b64config: str, debrid_service: str, d
     return stream_item
 
 
-async def _create_streams_with_status(request, b64config: str, config: dict, torrents: list, cached_files: list, media_id: str):
-    """Crée des éléments de flux en fonction du statut de disponibilité debrid."""
-    streams_list = []
-    status_map = {f['hash']: f for f in cached_files}
-    debrid_service = config.get("debridService", "torrent")
-
-    for torrent in torrents:
-        hash_val = torrent['infoHash']
-        cached_info = status_map.get(hash_val)
-        
-        status = cached_info.get('status', 'unknown') if cached_info else "unknown"
-
-        # Logique des emojis en fonction du statut
-        if status == "cached":
-            debrid_emoji = "⚡"
-        elif status in ["downloading", "queued"]:
-            debrid_emoji = "⬇️"
-        elif status == "magnet":
-            debrid_emoji = "🧲"
-        elif status == "failed":
-            debrid_emoji = "❌"
-        else:
-            debrid_emoji = "❓"
-
-        stream_item = _create_stream_item(request, b64config, debrid_service, debrid_emoji, torrent, media_id)
-        streams_list.append(stream_item)
-    
-    return streams_list
-
-# --- Route principale de streaming ---
-
 @streams.get("/stream/{media_type}/{media_id}.json")
 @streams.get("/{b64config}/stream/{media_type}/{media_id}.json")
 async def stream(request: Request, media_type: str, media_id: str, b64config: str = None, fankai_api: FankaiAPI = Depends(get_fankai_api)):
-    """Fournit les flux de streaming en vérifiant la disponibilité debrid au préalable."""
+    """
+    Fournit les flux de streaming en vérifiant la disponibilité debrid au préalable.
+    """
     config = config_check(b64config)
     if not config:
         return {"streams": []}
@@ -155,8 +126,6 @@ async def stream(request: Request, media_type: str, media_id: str, b64config: st
     anime_info, selected_episode = await _fetch_anime_and_episode_data(fankai_api, anime_id, episode_id, media_id)
     if not anime_info or not selected_episode:
         return {"streams": []}
-
-
     
     dataset = request.app.state.dataset.get('top', [])
     target_anime_data = next((item for item in dataset if str(item.get('api_id')) == anime_id), None)
@@ -167,13 +136,45 @@ async def stream(request: Request, media_type: str, media_id: str, b64config: st
 
     logger.info(f"Anime trouvé dans dataset: '{target_anime_data.get('name')}' pour épisode '{selected_episode.name}'")
     
-
-    all_torrents_for_episode = []
+    all_torrents_info = []
+    hashes_to_check = []
     for source in target_anime_data.get('sources', []):
         magnet = source.get('magnet')
+        info_hash_match = re.search(r'btih:([a-fA-F0-9]{40})', magnet)
+        if magnet and info_hash_match:
+            hash_val = info_hash_match.group(1).lower()
+            all_torrents_info.append({
+                "source": source,
+                "hash": hash_val
+            })
+            hashes_to_check.append(hash_val)
+
+    if not hashes_to_check:
+        return {"streams": []}
+
+
+    debrid_service = config.get("debridService", "torrent")
+    status_map = {}
+    if debrid_service != "torrent" and hashes_to_check:
+        http_client = request.app.state.http_client
+        stremthru_token = build_stremthru_token(debrid_service, config["debridApiKey"])
+        debrid_instance = StremThru(
+            session=http_client, video_id=media_id, media_only_id=anime_id,
+            token=stremthru_token, ip=get_client_ip(request)
+        )
+        
+        seeders_map = {h: 0 for h in hashes_to_check}
+        tracker_map = {h: 'dataset' for h in hashes_to_check}
+        sources_map = {h: {"filename": "..."} for h in hashes_to_check}
+
+        availability_results = await debrid_instance.get_availability(hashes_to_check, seeders_map, tracker_map, sources_map)
+        status_map = {result['hash']: result['status'] for result in availability_results}
+
+    streams_list = []
+    for torrent_info in all_torrents_info:
+        source = torrent_info["source"]
+        hash_val = torrent_info["hash"]
         files_in_torrent = source.get('files', [])
-        if not magnet or not files_in_torrent:
-            continue
 
         files_for_matching = [{"title": f} for f in files_in_torrent]
         best_file = await find_best_file_for_episode(request, files_for_matching, selected_episode)
@@ -181,47 +182,37 @@ async def stream(request: Request, media_type: str, media_id: str, b64config: st
         if best_file:
             try:
                 file_index = files_in_torrent.index(best_file['title'])
-                info_hash_match = re.search(r'btih:([a-fA-F0-9]{40})', magnet)
-                if info_hash_match:
-                    all_torrents_for_episode.append({
-                        'infoHash': info_hash_match.group(1).lower(),
-                        'title': best_file['title'],
-                        'fileIndex': file_index,
-                        'size': source.get('size', 0),
-                        'seeders': source.get('seeders') 
-                    })
-            except (ValueError, AttributeError):
+                
+                torrent_data = {
+                    'infoHash': hash_val,
+                    'title': best_file['title'],
+                    'fileIndex': file_index,
+                    'size': source.get('size', 0),
+                    'seeders': source.get('seeders')
+                }
+                
+                # Parce que les emojis, c'est cool
+                status = status_map.get(hash_val, 'unknown')
+                if status == "cached":
+                    debrid_emoji = "⚡"
+                elif status == "magnet":
+                    debrid_emoji = "🧲"
+                elif status in ["downloading", "queued"]:
+                    debrid_emoji = "⬇️"
+                else:
+                    debrid_emoji = "❓"
+                
+                stream_item = _create_stream_item(request, b64config, debrid_service, debrid_emoji, torrent_data, media_id)
+                streams_list.append(stream_item)
+
+
+            except (ValueError, AttributeError) as e:
+                logger.error(f"Erreur lors de la création du stream pour '{best_file['title']}': {e}")
                 continue
-    
-    if not all_torrents_for_episode:
-        logger.warning(f"Aucun torrent correspondant trouvé pour {media_id} dans le dataset.")
-        return {"streams": []}
 
+    if not streams_list:
+        logger.warning(f"Aucun stream n'a pu être généré pour {media_id} depuis le dataset.")
 
-    debrid_service = config.get("debridService", "torrent")
-    cached_files = []
-    if debrid_service != "torrent":
-        hashes = [t['infoHash'] for t in all_torrents_for_episode]
-        
-        http_client = request.app.state.http_client
-        stremthru_token = build_stremthru_token(debrid_service, config["debridApiKey"])
-        debrid_instance = StremThru(
-            session=http_client,
-            video_id=media_id,
-            media_only_id=anime_id,
-            token=stremthru_token,
-            ip=get_client_ip(request)
-        )
-        
-
-        seeders_map = {t['infoHash']: t.get('seeders', 0) for t in all_torrents_for_episode}
-        tracker_map = {t['infoHash']: 'dataset' for t in all_torrents_for_episode}
-        sources_map = {t['infoHash']: {"filename": t.get('title')} for t in all_torrents_for_episode}
-        
-        cached_files = await debrid_instance.get_availability(hashes, seeders_map, tracker_map, sources_map)
-
-    streams_list = await _create_streams_with_status(request, b64config, config, all_torrents_for_episode, cached_files, media_id)
-    
     return {"streams": streams_list}
 
 
