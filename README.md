@@ -14,6 +14,8 @@
 
 **FKStream** est un addon non officiel pour Stremio, conçu pour accéder au contenu proposé par Fankai. Il permet de parcourir une large bibliothèque d’animes, avec une prise en charge avancée des services de débridage pour un streaming fluide et optimisé.
 
+> **Hébergé par Fankai** : Une instance est disponible à l'adresse https://streamio.fankai.fr/configure
+
 ## ✨ Fonctionnalités
 
 - **Catalogue Fankai Complet** : Accès à l'ensemble des animes disponibles sur Fankai.
