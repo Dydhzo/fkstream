@@ -51,14 +51,6 @@ def default_dump(obj):
         return obj.dict()
     return str(obj)
 
-def normalize_anime_title_for_search(title: str) -> str:
-    """Normalise le titre d'un anime pour la recherche Nyaa en retirant les termes spécifiques à Fan-Kai(permet la recherche via url)"""
-    if not title:
-        return ""
-    terms_to_remove = ['Kaï', 'Yabai', 'Henshū', 'Fan-Cut']
-    pattern = '|'.join(re.escape(term) for term in terms_to_remove)
-    normalized = ' '.join(re.sub(pattern, '', title).split())
-    return normalized.strip()
 
 @lru_cache(maxsize=1)
 def get_rename_map():
