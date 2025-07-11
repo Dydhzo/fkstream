@@ -13,6 +13,11 @@ from fkstream.utils.models import Anime, Episode
 from fkstream.utils.stream_utils import (bytes_to_size,
                                          find_best_file_for_episode)
 
+from fastapi.responses import RedirectResponse, FileResponse
+from fkstream.utils.general import get_client_ip, b64_decode
+from fkstream.debrid.stremthru import StremThru
+from fkstream.debrid.manager import build_stremthru_token
+
 # --- Définition du routeur ---
 streams = APIRouter()
 
@@ -97,7 +102,8 @@ def _create_stream_item(request: Request, b64config: str, debrid_service: str, d
     else:
         encoded_filename = quote(display_title, safe='')
         encoded_media_id = b64_encode(media_id)
-        stream_item["url"] = f"{request.url.scheme}://{request.url.netloc}/{b64config}/playback/{encoded_media_id}/{hash_val}/{encoded_filename}"
+        stream_item["url"] = f"{request.url.scheme}://{request.url.netloc}/{b64config}/playback/{encoded_media_id}/{hash_val}/{torrent.get('fileIndex')}/{encoded_filename}"
+
         
         logger.info(f"URL generee: {stream_item['url']} (Source: Dataset, Fichier: {file_title})")
 
@@ -177,3 +183,63 @@ async def stream(request: Request, media_type: str, media_id: str, b64config: st
         logger.warning(f"Aucun stream n'a pu être généré pour {media_id} depuis le dataset.")
 
     return {"streams": streams_list}
+
+@streams.get("/{b64config}/playback/{b64_media_id}/{hash_val}/{file_index}/{filename:path}")
+async def playback(request: Request, b64config: str, b64_media_id: str, hash_val: str, file_index: int, filename: str):
+    """
+    Gère la lecture du média : contacte le service debrid et redirige vers le lien final
+    ou affiche une vidéo de fallback si le torrent est en cours de téléchargement (puis on ferme).
+    """
+    config = config_check(b64config)
+    if not config or config.get("debridService") == "torrent":
+        return FileResponse("fkstream/assets/uncached.mp4", media_type="video/mp4")
+
+    try:
+        real_media_id = b64_decode(b64_media_id)
+        media_only_id = real_media_id.split(':')[1]
+    except Exception:
+        logger.error(f"Impossible de décoder le media_id: {b64_media_id}")
+        return FileResponse("fkstream/assets/uncached.mp4", media_type="video/mp4")
+
+    anime_id, episode_id = await _parse_media_id(real_media_id)
+    if not anime_id or not episode_id:
+        logger.error(f"Impossible d'analyser l'ID de l'anime/épisode depuis {real_media_id}")
+        return FileResponse("fkstream/assets/uncached.mp4", media_type="video/mp4")
+
+    #! On récupère les détails complets de l'épisode pour avoir la saison et le numéro
+    fankai_api = FankaiAPI(request.app.state.http_client)
+    _, selected_episode = await _fetch_anime_and_episode_data(fankai_api, anime_id, episode_id, real_media_id)
+
+    if not selected_episode:
+        logger.error(f"Impossible de récupérer les détails de l'épisode pour {real_media_id}")
+        return FileResponse("fkstream/assets/uncached.mp4", media_type="video/mp4")
+
+    http_client = request.app.state.http_client #
+    client_ip = get_client_ip(request) #
+    stremthru_token = build_stremthru_token(config["debridService"], config["debridApiKey"]) #
+    
+    debrid_instance = StremThru(
+        session=http_client,
+        video_id=real_media_id,
+        media_only_id=media_only_id,
+        token=stremthru_token,
+        ip=client_ip
+    )
+    
+    logger.info(f"Appel de generate_download_link pour S{selected_episode.season_number}E{selected_episode.number}")
+    download_url = await debrid_instance.generate_download_link(
+        hash=hash_val,
+        index=str(file_index),
+        name=filename,
+        torrent_name=filename,
+        season=selected_episode.season_number,
+        episode=selected_episode.number
+    )
+    
+    if download_url:
+        logger.info(f"Redirection vers le lien debrid final pour {filename}")
+        return RedirectResponse(download_url, status_code=302)
+    else:
+        # Si le lien n'est pas disponible (en cours de DL ou erreur), on affiche la vidéo d'attente
+        logger.warning(f"Affichage de la vidéo d'attente pour {filename} (téléchargement en cours ou erreur).")
+        return FileResponse("fkstream/assets/uncached.mp4", media_type="video/mp4", status_code=200)

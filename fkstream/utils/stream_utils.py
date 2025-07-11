@@ -69,20 +69,20 @@ async def _get_rename_map(request: Request) -> dict:
     
     try:
         http_client = request.app.state.http_client
-        async with http_client.get(url) as response:
-            if response.status == 200:
-                content = await response.text()
-                for line in content.splitlines():
-                    if ' -> ' in line:
-                        old, new = line.split(' -> ', 1)
-                        rename_map[old.strip()] = new.strip()
-                request.app.state.rename_map = rename_map
-                logger.info(f"Liste de renommage chargée avec succès ({len(rename_map)} entrées).")
-                return rename_map
-            else:
-                logger.error(f"Échec du chargement de la liste de renommage, statut: {response.status}")
-                request.app.state.rename_map = {}
-                return {}
+
+        response = await http_client.get(url)
+        response.raise_for_status() # Lève une exception pour les erreurs HTTP
+        
+        content = await response.text()
+        for line in content.splitlines():
+            if ' -> ' in line:
+                old, new = line.split(' -> ', 1)
+                rename_map[old.strip()] = new.strip()
+        
+        request.app.state.rename_map = rename_map
+        logger.info(f"Liste de renommage chargée avec succès ({len(rename_map)} entrées).")
+        return rename_map
+            
     except Exception as e:
         logger.error(f"Erreur lors de la récupération de la liste de renommage: {e}")
         request.app.state.rename_map = {}
