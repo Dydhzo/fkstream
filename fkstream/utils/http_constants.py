@@ -17,11 +17,6 @@ JSON_HEADERS = {
     "Content-Type": "application/json",
 }
 
-# Headers pour RSS/XML (Nyaa)
-RSS_HEADERS = {
-    **DEFAULT_HEADERS, 
-    "Accept": "application/rss+xml,application/xml;q=0.9,text/html;q=0.8,*/*;q=0.7",
-}
 
 # Headers pour pages HTML (Fankai)
 HTML_HEADERS = {
