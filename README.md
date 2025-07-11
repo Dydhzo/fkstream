@@ -111,11 +111,11 @@ Toutes les configurations avancées se font via le fichier `.env`.
 
 ## 🙏 Remerciements
 
-- Un grand merci à **[Goldy]** pour le code original de **[comet](https://github.com/g0ldyy/comet)**.
+- Un grand merci à **[g0ldyy]** pour le code original de **[comet](https://github.com/g0ldyy/comet)**.
 - Merci à l'équipe de **[Fankai](https://linktr.ee/FanKai)** pour leur travail incroyable sur la bibliothèque de contenu.
 
 ---
 
 ## 📜 Licence
 
-Le code original de ce projet par Goldy est distribué sous la Licence MIT. Les modifications et contributions ultérieures sont également soumises à cette licence. Voir le fichier `LICENSE` pour le texte complet.
+Le code original de ce projet par g0ldyy est distribué sous la Licence MIT. Les modifications et contributions ultérieures sont également soumises à cette licence. Voir le fichier `LICENSE` pour le texte complet.
