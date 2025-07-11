@@ -1,18 +1,21 @@
 import base64
 import orjson
 import re
+import httpx
+import unicodedata
+from functools import lru_cache
 from fastapi import Request
 from fkstream.utils.models import settings
 from fkstream.utils.common_logger import logger
 
-# Extensions video supportees - SEULE source de verite
+# Extensions video supportees
+#! Limitations au seuls formats utilisés par Fan-Kai)
 VIDEO_EXTENSIONS = (
-    ".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v",
-    ".mpg", ".mpeg", ".m2v", ".asf", ".3gp", ".ogv", ".qt", ".rm", 
-    ".rmvb", ".f4v", ".f4p", ".roq", ".svi", ".yuv", ".mxf", ".nsv",
-    ".ogg", ".gif", ".gifv", ".3g2", ".amv", ".drc", ".f4a", ".f4b",
-    ".mp2", ".mpv", ".mng", ".mpe"
+    ".mkv", ".mp4"
 )
+
+# URL pour le fichier de renommage
+RENAME_FILE_URL = "https://raw.githubusercontent.com/Nackophilz/fankai_utilitaire/refs/heads/main/rename/films.txt"
 
 def b64_encode(s: str) -> str:
     """Encode une chaîne en base64 URL-safe."""
@@ -49,7 +52,7 @@ def default_dump(obj):
     return str(obj)
 
 def normalize_anime_title_for_search(title: str) -> str:
-    """Normalise le titre d'un anime pour la recherche Nyaa en retirant les termes spécifiques à Fan-Kai."""
+    """Normalise le titre d'un anime pour la recherche Nyaa en retirant les termes spécifiques à Fan-Kai(permet la recherche via url)"""
     if not title:
         return ""
     terms_to_remove = ['Kaï', 'Yabai', 'Henshū', 'Fan-Cut']
@@ -57,56 +60,164 @@ def normalize_anime_title_for_search(title: str) -> str:
     normalized = ' '.join(re.sub(pattern, '', title).split())
     return normalized.strip()
 
+@lru_cache(maxsize=1)
+def get_rename_map():
+    """
+    Récupère et analyse le fichier de renommage depuis l'URL, 
+    retournant un dictionnaire de mappage. Le résultat est mis en cache.
+    """
+    rename_map = {}
+    try:
+        with httpx.Client() as client:
+            response = client.get(RENAME_FILE_URL, follow_redirects=True)
+            response.raise_for_status()
+            content = response.text
+            for line in content.splitlines():
+                if " -> " in line:
+                    original, new = line.split(" -> ", 1)
+                    rename_map[original.strip()] = new.strip()
+            logger.info(f"Chargement réussi de {len(rename_map)} règles de renommage.")
+            return rename_map
+    except httpx.RequestError as e:
+        logger.error(f"Erreur lors de la récupération du fichier de renommage depuis {RENAME_FILE_URL}: {e}")
+        return {}
+    except Exception as e:
+        logger.error(f"Erreur lors de l'analyse du fichier de renommage: {e}")
+        return {}
+
+def apply_renaming(title: str) -> str:
+    """
+    Applique les règles de renommage à un titre si une correspondance est trouvée.
+    La correspondance se fait sur le titre sans son extension de fichier.
+    """
+    rename_map = get_rename_map()
+    title_no_ext = title.rsplit('.', 1)[0] if '.' in title else title
+    
+    if title_no_ext in rename_map:
+        new_title = rename_map[title_no_ext]
+        logger.debug(f"Titre renommé : '{title}' -> '{new_title}'")
+        return new_title
+    return title
+
+def normalize_for_comparison(title: str) -> str:
+    """
+    Normalisation d'un titre pour la comparaison (dernière méthode de recherche)
+    """
+    if not title:
+        return ""
+    
+    original_title = title
+    
+    # Étape 1: Extraire seulement le nom du fichier
+    if '/' in title or '\\' in title:
+        title = title.replace('\\', '/').split('/')[-1]
+    
+    # Étape 2: Enlever l'extension
+    title = title.rsplit('.', 1)[0]
+
+    # Étape 3: Passage en minuscules et suppression des accents
+    title = title.lower()
+    nfkd_form = unicodedata.normalize('NFKD', title)
+    title = "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+
+    # Étape 4: Supprime le contenu entre crochets et parenthèses
+    title = re.sub(r'\[.*?\]|\(.*?\)', '', title)
+
+    # Étape 5: Supprimer les termes de qualité vidéo et autres "bruits"
+    noise = [
+        '1080p', '720p', '480p', 'bdrip', 'multi', 'vostfr', 'vf2', 'vf', 'x264', 
+        'x265', 'hevc', 'bluray', 'web-dl', 'webrip', 'hdlight', 'dvdrip', 'remux',
+        'fan-cut', 'henshu', 'film', 'kai', 'yabai'
+    ]
+    noise_pattern = r'\b(' + '|'.join(re.escape(term) for term in noise) + r')\b'
+    title = re.sub(noise_pattern, '', title, flags=re.IGNORECASE)
+
+    # Étape 6: Remplace les séparateurs et apostrophes par des espaces
+    title = re.sub(r'[.\-_'']', ' ', title)
+
+    # Étape 7: Normaliser les numéros (ex: 01 -> 1)
+    title = re.sub(r'\b0+(\d+)\b', r'\1', title)
+    
+    # Étape 8: Remplacer les espaces multiples par un seul et nettoyer les bords
+    title = re.sub(r'\s+', ' ', title).strip()
+    
+    logger.debug(f"Normalisation: '{original_title}' -> '{title}'")
+    return title
 
 def find_best_file_for_episode(files: list, episode_info: dict):
     """
-    Trouve le fichier correspondant à un épisode en utilisant le nfo_filename.
-    Cette méthode est plus simple et directe : elle cherche le nom exact du fichier
-    sans le .nfo.
+    Trouve le fichier correspondant à un épisode en utilisant une logique de correspondance multi étapes
+    1. Correspondance exacte (rapide).
+    2. Correspondance normalisée (robuste).
+    3. Si aucune correspondance, applique les règles de renommage et réessaye l'étape 2.
     """
     nfo_filename = episode_info.get("nfo_filename")
     if not nfo_filename:
         logger.warning("Pas de nfo_filename fourni, impossible de matcher")
         return None
+
+    target_filename_base = nfo_filename[:-4] if nfo_filename.lower().endswith('.nfo') else nfo_filename
     
-    # Enlever l'extension .nfo
-    target_filename = nfo_filename
-    if target_filename.endswith('.nfo'):
-        target_filename = target_filename[:-4]
-    
-    logger.info(f"Recherche du fichier: '{target_filename}' dans {len(files)} fichiers")
+    # --- Étape 1: Correspondance exacte ---
+    logger.info(f"Recherche (étape 1 - exacte) pour: '{target_filename_base}'")
+    for i, file in enumerate(files):
+        filename = file.get("title")
+        if not filename or not is_video(filename):
+            continue
+        
+        filename_no_ext = filename.rsplit('.', 1)[0]
+        if target_filename_base.lower() == filename_no_ext.lower():
+            logger.info(f"✅ CORRESPONDANCE EXACTE TROUVÉE: '{filename}'")
+            best_file = dict(file)
+            best_file['index'] = i
+            if 'original_torrent_index' in file:
+                best_file['original_torrent_index'] = file['original_torrent_index']
+            return best_file
+
+    logger.warning("Aucune correspondance exacte trouvée. Passage à la correspondance normalisée.")
+
+    # --- Étape 2: Correspondance normalisée ---
+    normalized_target = normalize_for_comparison(target_filename_base)
+    logger.info(f"Recherche (étape 2 - normalisée) pour: '{normalized_target}'")
     
     for i, file in enumerate(files):
         filename = file.get("title")
         if not filename or not is_video(filename):
             continue
         
-        # Vérifier si le nom du fichier contient le nom cible
-        if target_filename in filename:
-            logger.info(f"✅ CORRESPONDANCE trouvée: '{target_filename}' dans '{filename}'")
+        normalized_filename = normalize_for_comparison(filename)
+        if normalized_target == normalized_filename:
+            logger.info(f"✅ CORRESPONDANCE TROUVÉE (étape 2 - normalisée): '{filename}'")
             best_file = dict(file)
             best_file['index'] = i
             if 'original_torrent_index' in file:
                 best_file['original_torrent_index'] = file['original_torrent_index']
             return best_file
-    
-    # Si pas de correspondance exacte, essayer sans l'extension du fichier torrent
+
+    logger.warning(f"Aucune correspondance trouvée à l'étape 2. Passage à l'étape 3 (renommage).")
+
+    # --- Étape 3: Renommage et nouvelle tentative de correspondance normalisée ---
+    renamed_target_base = apply_renaming(target_filename_base)
+    if renamed_target_base == target_filename_base:
+        logger.warning(f"⚠️ AUCUN FICHIER TROUVÉ pour: '{target_filename_base}' (aucune règle de renommage applicable)")
+        return None
+
+    normalized_renamed_target = normalize_for_comparison(renamed_target_base)
+    logger.info(f"Recherche (étape 3 - renommage) pour: '{normalized_renamed_target}'")
+
     for i, file in enumerate(files):
         filename = file.get("title")
         if not filename or not is_video(filename):
             continue
         
-        # Enlever l'extension pour comparer
-        filename_no_ext = filename.rsplit('.', 1)[0] if '.' in filename else filename
-        target_no_ext = target_filename.rsplit('.', 1)[0] if '.' in target_filename else target_filename
-        
-        if target_no_ext in filename_no_ext:
-            logger.info(f"✅ CORRESPONDANCE trouvée (sans extension): '{target_no_ext}' dans '{filename}'")
+        normalized_filename = normalize_for_comparison(filename)
+        if normalized_renamed_target == normalized_filename:
+            logger.info(f"✅ CORRESPONDANCE TROUVÉE (étape 3 - renommée): '{filename}'")
             best_file = dict(file)
             best_file['index'] = i
             if 'original_torrent_index' in file:
                 best_file['original_torrent_index'] = file['original_torrent_index']
             return best_file
-    
-    logger.warning(f"⚠️ AUCUN FICHIER trouvé pour: '{target_filename}'")
+
+    logger.warning(f"⚠️ AUCUN FICHIER TROUVÉ pour: '{target_filename_base}' même après renommage.")
     return None
