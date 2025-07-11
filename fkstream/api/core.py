@@ -271,6 +271,28 @@ async def fankai_catalog(request: Request, b64config: str = None, search: str = 
             "description": anime.get('plot', '') or "Aucune description disponible",
             "links": genre_links + imdb_links,
         }
+        
+        # Ajout du trailer si disponible
+        trailer_url = anime.get("trailer_url")
+        if trailer_url:
+            logger.debug(f"TRAILER - URL de bande-annonce trouvee: {trailer_url}")
+            if "youtube" in trailer_url:
+                try:
+                    parsed_url = urlparse(trailer_url)
+                    query_params = parse_qs(parsed_url.query)
+                    video_id = query_params.get("video_id", query_params.get("v", [None]))[0]
+
+                    if video_id:
+                        meta['trailers'] = [{"source": video_id, "type": "Trailer"}]
+                        logger.debug(f"TRAILER - Ajout de la propriete 'trailers' au meta-objet: {meta['trailers']}")
+                    else:
+                        logger.warning(f"TRAILER - Impossible d'extraire le video_id de l'URL: {trailer_url}")
+                except Exception as e:
+                    logger.warning(f"TRAILER - Impossible de parser l'URL de la bande-annonce '{trailer_url}': {e}")
+            else:
+                logger.warning(f"TRAILER - L'URL de la bande-annonce n'est pas une URL YouTube: {trailer_url}")
+        else:
+            logger.debug(f"TRAILER - Pas de 'trailer_url' trouve pour l'anime {anime.get('id')}.")
         metas.append(meta)
 
     if search and genre:
