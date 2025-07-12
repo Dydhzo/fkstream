@@ -102,7 +102,6 @@ Toutes les configurations avancées se font via le fichier `.env`.
 | `SCRAPE_LOCK_TTL`                            | (Optionnel) Durée de validité d'un verrou de recherche.                                | `300` (5 minutes)                    |
 | `SCRAPE_WAIT_TIMEOUT`                        | (Optionnel) Temps d'attente max pour un verrou.                                        | `30` (30 secondes)                   |
 | `DEBRID_PROXY_URL`                           | (Optionnel) URL de votre proxy pour contourner les blocages.                           | ` ` (vide)                           |
-| `GET_TORRENT_TIMEOUT`                        | (Optionnel) Temps maximum pour télécharger un fichier `.torrent`.                      | `20` (20 secondes)                   |
 | `PROXY_DEBRID_STREAM`                        | (Optionnel) Mettre à `True` pour activer le mode proxy.                                | `False`                              |
 | `PROXY_DEBRID_STREAM_PASSWORD`               | (Requis si `PROXY_DEBRID_STREAM=True`) Mot de passe pour les utilisateurs.             | `CHANGE_ME`                          |
 | `PROXY_DEBRID_STREAM_DEBRID_DEFAULT_SERVICE` | (Requis si `PROXY_DEBRID_STREAM=True`) Votre service debrid.                           | `realdebrid`                         |
