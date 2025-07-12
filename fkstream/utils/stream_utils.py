@@ -19,15 +19,6 @@ def bytes_to_size(bytes_val: int) -> str:
     else:
         return f"{bytes_val/1024**3:.2f} GB"
 
-def get_debrid_extension(service_name: str) -> str:
-    """Retourne l'extension de nom pour un service debrid donné."""
-    return {
-        "realdebrid": "RD",
-        "alldebrid": "AD",
-        "debridlink": "DL",
-        "premiumize": "PM",
-    }.get(service_name, "TOR")
-
 # --- Logique de matching ---
 
 def _normalize_filename_for_matching(filename: str) -> str:
@@ -143,3 +134,4 @@ async def find_best_file_for_episode(request: Request, files_in_torrent: list[di
 
     logger.warning(f"❌ Échec des 3 étapes. Aucune correspondance trouvée pour '{base_nfo_name}'")
     return None
+    
