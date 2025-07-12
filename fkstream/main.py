@@ -54,7 +54,6 @@ async def lifespan(app: FastAPI):
     Gère le cycle de vie de l'application FastAPI.
     Initialise les ressources et charge le dataset local au démarrage.
     """
-    update_task = None
     await setup_database()
     
     try:
@@ -63,39 +62,13 @@ async def lifespan(app: FastAPI):
         logger.debug("Client HTTP initialisé avec succès")
 
         # Chargement du dataset local
-        try:
-            with open('/data/dataset.json', 'rb') as f:
-                app.state.dataset = orjson.loads(f.read())
+        with open('dataset.json', 'r', encoding='utf-8') as f:
+            app.state.dataset = orjson.loads(f.read())
             logger.log("FKSTREAM", "Dataset local chargé avec succès.")
-        except FileNotFoundError:
-            logger.warning("Le fichier 'dataset.json' est introuvable. L'addon ne pourra pas fournir de liens de streaming. Tentative de téléchargement.")
-            app.state.dataset = {"top": []}
-        except Exception as e:
-            logger.warning(f"Impossible de charger le dataset local: {e}")
-            app.state.dataset = {"top": []}
 
-        # Tâche de mise à jour périodique du dataset en arrière-plan
-        async def periodic_update_dataset():
-            while True:
-                dataset_url = "https://raw.githubusercontent.com/Dydhzo/fkstream/refs/heads/main/dataset.json"
-                logger.info(f"Lancement de la mise à jour périodique du dataset depuis : {dataset_url}")
-                try:
-                    response = await app.state.http_client.get(dataset_url)
-                    response.raise_for_status()
-                    remote_dataset = orjson.loads(response.content)
-                    # Écriture du dataset distant dans le fichier local
-                    with open('/data/dataset.json', 'wb') as f:
-                        f.write(orjson.dumps(remote_dataset, option=orjson.OPT_INDENT_2))
-                    app.state.dataset = remote_dataset
-                    logger.log("FKSTREAM", "Dataset distant chargé et local mis à jour avec succès.")
-                except Exception as e:
-                    logger.warning(f"Échec de la mise à jour du dataset distant: {e}")
-                
-                logger.info("Prochaine mise à jour du dataset dans 1 heure.")
-                await asyncio.sleep(3600)  # 3600 secondes = 1 heure
-
-        update_task = asyncio.create_task(periodic_update_dataset())
-
+    except FileNotFoundError:
+        logger.error("Le fichier 'dataset.json' est introuvable. L'addon ne pourra pas fournir de liens de streaming.")
+        app.state.dataset = {"top": []}  # Initialise avec un dataset vide pour éviter les erreurs
     except Exception as e:
         logger.error(f"Échec de l'initialisation : {e}")
         raise RuntimeError(f"L'initialisation a échoué : {e}")
@@ -107,16 +80,9 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         # Nettoyage à l'arrêt de l'application
-        if update_task:
-            update_task.cancel()
         cleanup_task.cancel()
-
-        tasks_to_await = [cleanup_task]
-        if update_task:
-            tasks_to_await.append(update_task)
-
         try:
-            await asyncio.gather(*tasks_to_await, return_exceptions=True)
+            await cleanup_task
         except asyncio.CancelledError:
             pass
         
@@ -196,7 +162,6 @@ def start_log():
         f"Base de donnees ({settings.DATABASE_TYPE}): {settings.DATABASE_PATH if settings.DATABASE_TYPE == 'sqlite' else settings.DATABASE_URL} - TTL: metadata={settings.METADATA_TTL}s, debrid={settings.DEBRID_AVAILABILITY_TTL}s",
     )
     logger.log("FKSTREAM", f"Proxy Debrid: {settings.DEBRID_PROXY_URL}")
-    logger.log("FKSTREAM", f"Timeout pour recuperer le torrent: {settings.GET_TORRENT_TIMEOUT}s")
     logger.log(
         "FKSTREAM",
         f"Proxy de stream Debrid: {bool(settings.PROXY_DEBRID_STREAM)} - Service Debrid par defaut: {settings.PROXY_DEBRID_STREAM_DEBRID_DEFAULT_SERVICE} - Cle API Debrid par defaut: {'*' * 8 if settings.PROXY_DEBRID_STREAM_DEBRID_DEFAULT_APIKEY else 'Non definie'}",
