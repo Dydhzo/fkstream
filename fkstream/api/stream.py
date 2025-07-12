@@ -216,36 +216,27 @@ async def stream(request: Request, media_type: str, media_id: str, b64config: st
     return {"streams": streams_list}
 
 
-# Endpoint séparé pour servir les assets
-@streams.get("/{b64config}/assets/uncached.mp4")
-async def serve_uncached_asset():
-    """Sert la vidéo uncached.mp4 depuis un endpoint séparé."""
-    return FileResponse("fkstream/assets/uncached.mp4", media_type="video/mp4")
-
 @streams.get("/{b64config}/playback/{b64_media_id}/{hash_val}/{file_index}/{filename:path}")
 async def playback(request: Request, b64config: str, b64_media_id: str, hash_val: str, file_index: int, filename: str):
     """
     Gère la lecture du média : contacte le service debrid et redirige vers le lien final
-    ou redirige vers l'asset uncached si le torrent est en cours de téléchargement.
+    ou affiche une vidéo de fallback si le torrent est en cours de téléchargement (puis on ferme).
     """
     config = config_check(b64config)
     if not config or config.get("debridService") == "torrent":
-        uncached_url = f"{request.url.scheme}://{request.url.netloc}/{b64config}/assets/uncached.mp4"
-        return RedirectResponse(uncached_url, status_code=302)
+        return FileResponse("fkstream/assets/uncached.mp4", media_type="video/mp4")
 
     try:
         real_media_id = b64_decode(b64_media_id)
         media_only_id = real_media_id.split(':')[1]
     except Exception:
         logger.error(f"Impossible de décoder le media_id: {b64_media_id}")
-        uncached_url = f"{request.url.scheme}://{request.url.netloc}/{b64config}/assets/uncached.mp4"
-        return RedirectResponse(uncached_url, status_code=302)
+        return FileResponse("fkstream/assets/uncached.mp4", media_type="video/mp4")
 
     anime_id, episode_id = await _parse_media_id(real_media_id)
     if not anime_id or not episode_id:
         logger.error(f"Impossible d'analyser l'ID de l'anime/épisode depuis {real_media_id}")
-        uncached_url = f"{request.url.scheme}://{request.url.netloc}/{b64config}/assets/uncached.mp4"
-        return RedirectResponse(uncached_url, status_code=302)
+        return FileResponse("fkstream/assets/uncached.mp4", media_type="video/mp4")
 
     #! On récupère les détails complets de l'épisode pour avoir la saison et le numéro
     fankai_api = FankaiAPI(request.app.state.http_client)
@@ -253,8 +244,7 @@ async def playback(request: Request, b64config: str, b64_media_id: str, hash_val
 
     if not selected_episode:
         logger.error(f"Impossible de récupérer les détails de l'épisode pour {real_media_id}")
-        uncached_url = f"{request.url.scheme}://{request.url.netloc}/{b64config}/assets/uncached.mp4"
-        return RedirectResponse(uncached_url, status_code=302)
+        return FileResponse("fkstream/assets/uncached.mp4", media_type="video/mp4")
 
     http_client = request.app.state.http_client #
     client_ip = get_client_ip(request) #
@@ -282,7 +272,6 @@ async def playback(request: Request, b64config: str, b64_media_id: str, hash_val
         logger.info(f"Redirection vers le lien debrid final pour {filename}")
         return RedirectResponse(download_url, status_code=302)
     else:
-        # Si le lien n'est pas disponible (en cours de DL ou erreur), on redirige vers l'asset
-        logger.warning(f"Redirection vers la vidéo d'attente pour {filename} (téléchargement en cours ou erreur).")
-        uncached_url = f"{request.url.scheme}://{request.url.netloc}/{b64config}/assets/uncached.mp4"
-        return RedirectResponse(uncached_url, status_code=302)
+        # Si le lien n'est pas disponible (en cours de DL ou erreur), on affiche la vidéo d'attente
+        logger.warning(f"Affichage de la vidéo d'attente pour {filename} (téléchargement en cours ou erreur).")
+        return FileResponse("fkstream/assets/uncached.mp4", media_type="video/mp4", status_code=200)
