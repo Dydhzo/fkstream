@@ -316,7 +316,7 @@ class StremThru:
             return magnet, status
         if status == "downloading":
             logger.info(f"⏬ Le torrent est en cours de telechargement: {hash}")
-            return magnet, status
+            return None, None
         if status == "failed":
             logger.warning(f"❌ Le telechargement a echoue pour le hash: {hash}")
             return None, None
