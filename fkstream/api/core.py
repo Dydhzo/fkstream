@@ -91,7 +91,7 @@ async def manifest(request: Request, b64config: str = None, fankai_api: FankaiAP
         "id": settings.ADDON_ID,
         "name": settings.ADDON_NAME,
         "description": "FKStream – Addon non officiel pour accéder au contenu de Fankai",
-        "version": "1.2.0",
+        "version": "1.2.1",
         "catalogs": [
             {
                 "type": "anime",
