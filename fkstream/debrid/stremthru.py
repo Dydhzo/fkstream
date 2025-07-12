@@ -307,55 +307,37 @@ class StremThru:
             return None
 
     async def _handle_magnet_status(self, hash: str, magnet: dict):
-        """Gère les différents statuts d'un lien magnet et retourne un objet magnet mis à jour ou une réponse finale."""
+        """Gère les différents statuts d'un lien magnet avec une logique uniforme de retry pour tous les statuts."""
         status = magnet.get("data", {}).get("status")
         logger.info(f"🎬 Statut du magnet StremThru: {status} pour le hash {hash}")
 
-        if status in ["cached", "downloaded"]:
-            logger.info(f"✅ Torrent pret pour le streaming: {hash} (statut: {status})")
-            return magnet, status
-        if status == "downloading":
-            logger.info(f"⏬ Le torrent est en cours de telechargement: {hash}")
-            return None, None
-        if status == "failed":
-            logger.warning(f"❌ Le telechargement a echoue pour le hash: {hash}")
-            return None, None
-        if status == "queued":
-            logger.info(f"📋 Le torrent est en file d'attente: {hash}. Nouvelle verification des fichiers.")
-            try:
+        # Logique uniforme pour TOUS les statuts - retry pendant 10 secondes maximum
+        logger.info(f"🔄 Verification des fichiers pour le statut '{status}': {hash}")
+        try:
+            for i in range(10):
                 magnet_link = get_magnet_link(hash) or f"magnet:?xt=urn:btih:{hash}"
                 recheck_response = await self.session.get(f"{self.base_url}/magnets/check?magnet={magnet_link}&client_ip={self.client_ip}&sid={self.sid}", headers=self.default_headers)
                 recheck_data = recheck_response.json()
+                
+                # Vérifier si les fichiers sont disponibles
                 if recheck_data.get("data", {}).get("items") and recheck_data["data"]["items"][0].get("files"):
                     magnet["data"]["files"] = recheck_data["data"]["items"][0]["files"]
-                    logger.info(f"✅ Les fichiers sont maintenant disponibles pour le torrent en file d'attente: {hash}")
+                    logger.info(f"✅ Fichiers disponibles apres {i+1}s pour le statut '{status}': {hash}")
                     return magnet, status
+                
+                # Si c'est le premier essai, pas besoin d'attendre
+                if i == 0:
+                    await asyncio.sleep(0.5)  # Petit délai pour éviter le spam
                 else:
-                    logger.info(f"⏳ Les fichiers ne sont pas encore disponibles pour le torrent en file d'attente: {hash}")
-                    return None, None
-            except Exception as e:
-                logger.warning(f"❌ Erreur lors de la nouvelle verification pour le torrent en file d'attente {hash}: {e}")
-                return None, None
-        if status == "unknown":
-            logger.info(f"🤔 Le statut est inconnu pour {hash}. Forcage de l'analyse avec interrogation.")
-            try:
-                for i in range(10):
-                    magnet_link = get_magnet_link(hash) or f"magnet:?xt=urn:btih:{hash}"
-                    recheck_response = await self.session.get(f"{self.base_url}/magnets/check?magnet={magnet_link}&client_ip={self.client_ip}&sid={self.sid}", headers=self.default_headers)
-                    recheck_data = recheck_response.json()
-                    if recheck_data.get("data", {}).get("items") and recheck_data["data"]["items"][0].get("files"):
-                        magnet["data"]["files"] = recheck_data["data"]["items"][0]["files"]
-                        logger.info(f"✅ Les fichiers sont maintenant disponibles pour le torrent inconnu apres {i+1}s: {hash}")
-                        return magnet, status
                     await asyncio.sleep(1)
-                logger.warning(f"❌ L'interrogation a expire apres 10s pour {hash}. Aucun fichier trouve.")
-                return None, None
-            except Exception as e:
-                logger.warning(f"❌ Erreur lors de l'interrogation pour le torrent inconnu {hash}: {e}")
-                return None, None
-        
-        logger.warning(f"❓ Statut non gere '{status}' pour le hash {hash}")
-        return magnet, status
+                    
+            # Aucun fichier trouvé après 10 secondes
+            logger.warning(f"❌ Aucun fichier disponible apres 10s pour le statut '{status}': {hash}")
+            return None, None
+            
+        except Exception as e:
+            logger.warning(f"❌ Erreur lors de la verification pour le statut '{status}' {hash}: {e}")
+            return None, None
 
     async def _get_magnet_status(self, hash: str):
         """Obtient le statut initial d'un lien magnet auprès de StremThru."""
