@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fkstream"
-version = "1.0.0"
+version = "1.1.0"
 description = "FKStream – Addon non officiel pour accéder au contenu de Fankai"
 requires-python = ">=3.11"
 dependencies = [
@@ -20,7 +20,6 @@ dependencies = [
     "pydantic-settings",
     "rank-torrent-name==1.8.3",
     "uvicorn",
-    "feedparser",
     "httpx",
 ]
 

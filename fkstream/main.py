@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
     try:
         # Initialisation du client HTTP
         app.state.http_client = HttpClient()
-        logger.debug("Client HTTP initialisé avec succès")
+        logger.info("Client HTTP initialisé avec succès")
 
         # Chargement du dataset local
         try:
@@ -144,7 +144,7 @@ app.add_middleware(
 static_dir = "fkstream/templates"
 if os.path.exists(static_dir) and os.path.isdir(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
-    logger.debug(f"Fichiers statiques montes depuis {static_dir}")
+    logger.info(f"Fichiers statiques montes depuis {static_dir}")
 else:
     logger.warning(f"Repertoire statique {static_dir} non trouve, les fichiers statiques ne seront pas disponibles")
 

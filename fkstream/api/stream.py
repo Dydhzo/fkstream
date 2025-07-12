@@ -8,10 +8,12 @@ from fkstream.debrid.manager import get_debrid_extension
 from fkstream.scrapers.fankai import FankaiAPI, get_or_fetch_anime_details
 from fkstream.utils.common_logger import logger
 from fkstream.utils.dependencies import get_fankai_api
-from fkstream.utils.general import b64_encode, config_check
+from fkstream.utils.general import b64_encode
+from fkstream.utils.config_validator import config_check
 from fkstream.utils.models import Anime, Episode
 from fkstream.utils.stream_utils import (bytes_to_size,
                                          find_best_file_for_episode)
+from fkstream.utils.magnet_store import store_magnet_link
 
 from fastapi.responses import RedirectResponse, FileResponse
 from fkstream.utils.general import get_client_ip, b64_decode
@@ -143,6 +145,8 @@ async def stream(request: Request, media_type: str, media_id: str, b64config: st
         info_hash_match = re.search(r'btih:([a-fA-F0-9]{40})', magnet)
         if magnet and info_hash_match:
             hash_val = info_hash_match.group(1).lower()
+            # Stocker le magnet complet avec trackers pour éviter l'utilisation du magnet de secours
+            store_magnet_link(hash_val, magnet)
             all_torrents_info.append({
                 "source": source,
                 "hash": hash_val

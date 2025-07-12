@@ -9,7 +9,7 @@ from fkstream.utils.models import settings
 from fkstream.utils.common_logger import logger
 
 # Extensions video supportees
-#! Limitations au seuls formats utilisés par Fan-Kai)
+# Limité aux seuls formats utilisés par Fan-Kai
 VIDEO_EXTENSIONS = (
     ".mkv", ".mp4"
 )
@@ -30,10 +30,6 @@ def b64_decode(s: str) -> str:
     except Exception:
         raise ValueError("Chaine base64 invalide")
 
-def config_check(b64config: str):
-    """Wrapper legacy pour la validation de configuration."""
-    from .config_validator import validate_config
-    return validate_config(b64config)
 
 def get_client_ip(request: Request) -> str:
     """Récupère l'adresse IP du client à partir de la requête."""
