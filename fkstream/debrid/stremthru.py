@@ -6,7 +6,7 @@ from RTN import parse
 from fkstream.utils.models import settings
 from fkstream.utils.general import is_video, find_best_file_for_episode
 from fkstream.utils.database import get_debrid_from_cache, save_debrid_to_cache, get_metadata_from_cache, set_metadata_to_cache
-from fkstream.utils.logger import logger
+from fkstream.utils.common_logger import logger
 from fkstream.utils.magnet_store import get_magnet_link
 from fkstream.utils.http_client import HttpClient
 from fkstream.scrapers.fankai import FankaiAPI, get_or_fetch_anime_details
