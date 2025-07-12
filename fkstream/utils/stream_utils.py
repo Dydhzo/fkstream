@@ -64,7 +64,7 @@ async def _get_rename_map(request: Request) -> dict:
         response = await http_client.get(url)
         response.raise_for_status() # Lève une exception pour les erreurs HTTP
         
-        content = await response.text()
+        content = response.text
         for line in content.splitlines():
             if ' -> ' in line:
                 old, new = line.split(' -> ', 1)
