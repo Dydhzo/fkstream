@@ -36,12 +36,6 @@ def validate_config(b64config: str) -> dict:
         return default_config
 
 
-def is_valid_config(b64config: str) -> bool:
-    """Vérification rapide si la configuration est valide sans traitement complet."""
-    try:
-        if not b64config:
-            return False
-        config = orjson.loads(b64_decode(b64config))
-        return "indexers" not in config
-    except Exception:
-        return False
+def config_check(b64config: str):
+    """Wrapper pour la validation de configuration."""
+    return validate_config(b64config)
