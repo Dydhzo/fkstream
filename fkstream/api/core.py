@@ -5,7 +5,7 @@ from urllib.parse import quote, urlparse, parse_qs
 from datetime import datetime
 
 from fkstream.utils.models import settings, web_config, Episode
-from fkstream.utils.general import config_check
+from fkstream.utils.config_validator import config_check
 from fkstream.debrid.manager import get_debrid_extension
 from fkstream.scrapers.fankai import FankaiAPI, get_or_fetch_anime_details
 from fkstream.utils.common_logger import logger
