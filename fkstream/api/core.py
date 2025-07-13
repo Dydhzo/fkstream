@@ -105,10 +105,10 @@ async def manifest(request: Request, b64config: str = None, fankai_api: FankaiAP
                         "name": "sort",
                         "isRequired": False,
                         "options": [
-                            "last_update:Dernière mise à jour",
-                            "rating_value:Note",
-                            "title:Titre",
-                            "year:Année"
+                            "Dernière mise à jour",
+                            "Note",
+                            "Titre",
+                            "Année"
                         ]
                     }
                 ]
@@ -224,8 +224,16 @@ async def fankai_catalog(request: Request, b64config: str = None, search: str = 
 
 
     config = config_check(b64config)
-    sort_key_from_ui = sort.split(':')[0] if sort else None
-    sort_by = sort_key_from_ui if sort_key_from_ui else config.get("defaultSort", "last_update")
+    
+    # Mapping des noms d'affichage vers les clés internes
+    sort_mapping = {
+        "Dernière mise à jour": "last_update",
+        "Note": "rating_value", 
+        "Titre": "title",
+        "Année": "year"
+    }
+    
+    sort_by = sort_mapping.get(sort, config.get("defaultSort", "last_update")) if sort else config.get("defaultSort", "last_update")
     
     logger.info(f"Tri du catalogue par: {sort_by}")
 
