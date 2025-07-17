@@ -34,7 +34,7 @@ def _normalize_filename_for_matching(filename: str) -> str:
     # Supprime les métadonnées courantes
     base = re.sub(r'\[.*?\]|\(.*?\)', '', base)
     base = re.sub(r'\b\d{3,4}p\b', '', base)
-    base = re.sub(r'\.(mkv|mp4|avi|nfo)$', '', base, flags=re.IGNORECASE)
+    base = re.sub(r'.(mkv|mp4|avi|nfo)(?=\s|$)', '', base, flags=re.IGNORECASE, count=0)
     base = re.sub(r'\b(multi|vo|vf|vostfr|x264|x265|hevc|bdrip|webrip|dvdrip)\b', '', base)
     
     # Nettoyage final
